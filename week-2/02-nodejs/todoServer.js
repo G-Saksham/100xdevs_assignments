@@ -39,11 +39,142 @@
 
   Testing the server - run `npm run test-todoServer` command in terminal
  */
-  const express = require('express');
-  const bodyParser = require('body-parser');
-  
+  const express = require("express");
+  const fsPromises = require("fs").promises;
+  const path = require("path");
+  const bodyParser = require("body-parser");
+  const { error, Console, trace } = require("console");
+  const { networkInterfaces } = require("os");
+
   const app = express();
-  
   app.use(bodyParser.json());
-  
+
+  const filePath = "./todos.json";
+
+  async function rewriteFile(filePath, data) {
+    try {
+      return await fsPromises.writeFile(filePath, data);
+    } catch (error) {
+      res.status(400).send("Unable to re-write the file");
+    }
+  }
+
+  app.get("/todos", async (req, res) => {
+    const data = await fsPromises.readFile(filePath, "utf-8");
+    try {
+      const todos = JSON.parse(data);
+      res.status(200).json(todos);
+    } catch (error) {
+      res.status(500).send("file not found.");
+    }
+  });
+
+  app.get("/todos/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const data = await fsPromises.readFile(filePath, "utf-8");
+      const todos = JSON.parse(data);
+      const arr = todos.filter((todo) => todo.id == id);
+      if (arr.length === 0 && todos != 0) {
+        throw error;
+      }
+      res.status(200).json(arr);
+    } catch (error) {
+      res.status(404).send("404 Not Found");
+    }
+  });
+
+  app.post("/todos", async (req, res) => {
+    try {
+      const newTitle = req.body.title;
+      const isCompleted = req.body.completed;
+      const newDescription = req.body.description;
+
+      const data = await fsPromises.readFile(filePath, "utf-8");
+      let todos = JSON.parse(data);
+      const newId = Math.floor(Math.random() * 1000);
+      const newTodo = {
+        id: newId,
+        title: newTitle,
+        completed: isCompleted,
+        description: newDescription,
+      };
+      let repeater = false;
+      todos.forEach((todo) => {
+        if (newTitle === todo.title) {
+          repeater = true;
+        }
+      });
+      if (repeater) {
+        res.status(409).send("Todo is already present!");
+      } else {
+        todos.push(newTodo);
+        const newData = JSON.stringify(todos);
+        rewriteFile(filePath, newData);
+        res
+          .status(201)
+          .json({ msg: `Created the todo with an ID of ${newId}` });
+      }
+    } catch (error) {
+      res.status(400).send("Unable to save the data in the file");
+    }
+  });
+
+  app.put("/todos/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const newTitle = req.body.title;
+      const isCompleted = req.body.completed;
+      const newDescription = req.body.description;
+      const data = await fsPromises.readFile(filePath, "utf-8");
+      let todos = JSON.parse(data);
+      let checker = false;
+      todos.forEach((todo) => {
+        if (todo.id == id) {
+          checker = true;
+          if (isCompleted != undefined && isCompleted != todo.completed) {
+            todo.completed = isCompleted;
+          }
+          if (newTitle != undefined && newTitle != todo.title) {
+            todo.title = newTitle;
+          }
+          if (
+            newDescription != undefined &&
+            newDescription != todo.description
+          ) {
+            todo.description = newDescription;
+          }
+        }
+      });
+      if (checker) {
+        const newData = JSON.stringify(todos);
+        rewriteFile(filePath, newData);
+        res.status(200).send("updated");
+      } else {
+        throw error;
+      }
+    } catch (error) {
+      res.status(404).send("todo not found.");
+    }
+  });
+
+  app.delete("/todos/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const data = await fsPromises.readFile(filePath, "utf-8");
+      const todos = JSON.parse(data);
+      const newData = JSON.stringify(todos.filter((todo) => todo.id != id));
+      rewriteFile(filePath, newData);
+      res.status(200).send("Todo deleted.");
+    } catch (error) {
+      res.status(404).send("Todo not found!");
+    }
+  });
+
+  app.all("*", (req, res) => {
+    res.status(404).send("Route not found!");
+  });
+
+  // app.listen(3000);
   module.exports = app;
+  
